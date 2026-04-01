@@ -1,11 +1,13 @@
+from threading import Thread, current_thread
 import socket  # noqa: F401
 
-def main():
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
+# There is an async task accepting connections. For each connection, creates a task to process the commands from
+# that connection. The task is alive as long as the connection is alive.
+#
+# The connection task sits waiting for incoming messages and exeuctes them as soon as they appear.
 
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    (skt, _) = server_socket.accept() # wait for client
+def connection(skt):
+    print("serving connections on thread", current_thread())
     try:
         while True:
             if not (chunk := receive(skt)):
@@ -14,6 +16,24 @@ def main():
                 break
     finally:
         skt.close()
+
+
+connections = []
+
+
+def main():
+    # You can use print statements as follows for debugging, they'll be visible when running tests.
+    print("Logs from your program will appear here!")
+
+    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
+
+    while True:
+        print("Waiting for commands...")
+        (skt, _) = server_socket.accept() # wait for client
+        # Launch thread using this socket.
+        th = Thread(target=connection, name=f"socket {skt}", args=(skt,))
+        connections.append(th)
+        th.start()
 
 
 def receive(skt) -> bytes | None:
