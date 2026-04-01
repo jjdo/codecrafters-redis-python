@@ -5,19 +5,18 @@ def main():
     print("Logs from your program will appear here!")
 
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    while True:
-        (skt, _) = server_socket.accept() # wait for client
-
-        try:
+    (skt, _) = server_socket.accept() # wait for client
+    try:
+        while True:
             chunk = receive(skt)
             if not chunk:
-                continue
+                break
 
             sent = send(skt, b"+PONG\r\n")
             if sent == -1:
                 print("Client disconnected while sending.")
-        finally:
-            skt.close()
+    finally:
+        skt.close()
 
 
 def receive(skt) -> bytes | None:
@@ -29,6 +28,7 @@ def receive(skt) -> bytes | None:
             print("Client disconnected while receving.")
             return None
         reply += r
+        print("RECEIVED CHUNK", reply)
         if reply.endswith(b"\n"):
             return reply.strip()
          
