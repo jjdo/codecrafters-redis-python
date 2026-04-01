@@ -8,13 +8,10 @@ def main():
     (skt, _) = server_socket.accept() # wait for client
     try:
         while True:
-            chunk = receive(skt)
-            if not chunk:
+            if not (chunk := receive(skt)):
                 break
-
-            sent = send(skt, b"+PONG\r\n")
-            if sent == -1:
-                print("Client disconnected while sending.")
+            if (sent := send(skt, b"+PONG\r\n")) == -1:
+                break
     finally:
         skt.close()
 
@@ -22,23 +19,24 @@ def main():
 def receive(skt) -> bytes | None:
     # TCP messages end with \n.
     reply = b""
-    while True:
+    while not reply.endswith(b"\n"):
         r = skt.recv(256)
         if not r:
             print("Client disconnected while receving.")
             return None
         reply += r
-        print("RECEIVED CHUNK", reply)
-        if reply.endswith(b"\n"):
-            return reply.strip()
+    
+    return reply.strip()
          
 
 def send(skt, msg: bytes) -> int:
     sent = 0
     while sent < len(msg):
         if (ns := skt.send(msg[sent:])) == 0:
+            print("Client disconnected while sending.")
             return -1
         sent += ns
+
     return sent
 
 
