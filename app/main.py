@@ -7,7 +7,7 @@ import socket  # noqa: F401
 # The connection task sits waiting for incoming messages and exeuctes them as soon as they appear.
 
 def connection(skt):
-    print("serving connections on thread", current_thread())
+    print("serving connections on thread '%s'" % current_thread().name)
     try:
         while True:
             if not (chunk := receive(skt)):
@@ -31,7 +31,7 @@ def main():
         print("Waiting for commands...")
         (skt, _) = server_socket.accept() # wait for client
         # Launch thread using this socket.
-        th = Thread(target=connection, name=f"socket {skt}", args=(skt,))
+        th = Thread(target=connection, name=f"socket {skt.fileno()}", args=(skt,))
         connections.append(th)
         th.start()
 
