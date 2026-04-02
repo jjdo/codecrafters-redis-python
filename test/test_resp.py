@@ -1,9 +1,9 @@
-import io
-from app.resp import (
+import asyncio
+import socket
+from app.async_resp import (
     RESP,
     RESPError,
     RESPEot,
-    RESPBuffered,
     RESPStream,
     Array,
     ArrayNull,
@@ -15,26 +15,56 @@ from app.resp import (
 import pytest
 
 
-def resp_stream(data: bytes) -> RESPStream:
-    return RESPBuffered(io.BytesIO(data))
+@pytest.fixture
+def resp_stream():
+    # Simulate a StreamReader
+    class MockStreamReader:
+        def __init__(self, data: bytes):
+            self.data = data
+            self.p = 0
+
+        async def read(self, n: int) -> bytes:
+            if self.at_eof():
+                return b""
+            if (self.p + n) > len(self.data):
+                self.p = len(self.data)
+                return self.data
+            else:
+                d = self.data[self.p : self.p + n]
+                self.p += n
+                return d
+
+        def feed_eof(self):
+            self.p = len(self.data)
+
+        def at_eof(self) -> bool:
+            return self.p >= len(self.data)
+
+    def f(data: bytes):
+        return RESPStream(MockStreamReader(data))
+
+    yield f
 
 
-def test_invalid_type():
+@pytest.mark.asyncio
+async def test_invalid_type(resp_stream):
     resp = RESP()
     with pytest.raises(RESPError):
-        resp.parse(resp_stream(b"@5\r\nhello\r\n"))
+        await resp.parse(resp_stream(b"@5\r\nhello\r\n"))
 
 
-def test_simple_string():
+@pytest.mark.asyncio
+async def test_simple_string(resp_stream):
     resp = RESP()
-    r = resp.parse(resp_stream(b"+hello\r\n"))
+    r = await resp.parse(resp_stream(b"+hello\r\n"))
     assert r == SimpleString("hello")
 
 
-def test_simple_string_empty():
+@pytest.mark.asyncio
+async def test_simple_string_empty(resp_stream):
     resp = RESP()
     with pytest.raises((RESPEot, RESPError)):
-        resp.parse(resp_stream(b"+\r\n"))
+        await resp.parse(resp_stream(b"+\r\n"))
 
 
 def test_simple_string_dump():
@@ -42,18 +72,21 @@ def test_simple_string_dump():
     assert type_.dump() == b"+hello\r\n"
 
 
-def test_bulk_string():
+@pytest.mark.asyncio
+async def test_bulk_string(resp_stream):
     resp = RESP()
-    r = resp.parse(resp_stream(b"$5\r\nhello\r\n"))
+    r = await resp.parse(resp_stream(b"$5\r\nhello\r\n"))
     assert r == BulkString("hello")
 
 
-def test_bulk_string_empty():
+@pytest.mark.asyncio
+async def test_bulk_string_empty(resp_stream):
     resp = RESP()
-    r = resp.parse(resp_stream(b"$0\r\n\r\n"))
+    r = await resp.parse(resp_stream(b"$0\r\n\r\n"))
     assert r == BulkString("")
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "bulk_string",
     [
@@ -65,10 +98,10 @@ def test_bulk_string_empty():
         b"$",  # missing tail
     ],
 )
-def test_bulk_string_invlid(bulk_string):
+async def test_bulk_string_invlid(bulk_string, resp_stream):
     resp = RESP()
     with pytest.raises((RESPEot, RESPError)):
-        resp.parse(resp_stream(bulk_string))
+        await resp.parse(resp_stream(bulk_string))
 
 
 def test_bulk_string_dump():
@@ -76,9 +109,10 @@ def test_bulk_string_dump():
     assert array.dump() == b"$13\r\nA bulk string\r\n"
 
 
-def test_bulk_null_string():
+@pytest.mark.asyncio
+async def test_bulk_null_string(resp_stream):
     resp = RESP()
-    r = resp.parse(resp_stream(b"$-1\r\n"))
+    r = await resp.parse(resp_stream(b"$-1\r\n"))
     assert r == BulkNullString()
 
 
@@ -87,21 +121,24 @@ def test_bulk_null_string_dump():
     assert type_.dump() == b"$-1\r\n"
 
 
-def test_array():
+@pytest.mark.asyncio
+async def test_array(resp_stream):
     resp = RESP()
-    r = resp.parse(resp_stream(b"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"))
+    r = await resp.parse(resp_stream(b"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"))
     assert r == Array([BulkString("hello"), BulkString("world")])
 
 
-def test_array_null():
+@pytest.mark.asyncio
+async def test_array_null(resp_stream):
     resp = RESP()
-    r = resp.parse(resp_stream(b"*-1\r\n"))
+    r = await resp.parse(resp_stream(b"*-1\r\n"))
     assert r == ArrayNull()
 
 
-def test_array_empty():
+@pytest.mark.asyncio
+async def test_array_empty(resp_stream):
     resp = RESP()
-    r = resp.parse(resp_stream(b"*0\r\n"))
+    r = await resp.parse(resp_stream(b"*0\r\n"))
     assert r == Array([])
 
 
