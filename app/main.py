@@ -1,5 +1,6 @@
 from threading import Thread, current_thread
 from app.resp import RESP, RESPSocket, RESPEot, RESPError, RESPTypeKind
+from app.cmd import execute
 import socket  # noqa: F401
 
 
@@ -9,23 +10,15 @@ def connection(skt):
     try:
         while True:
             rt = resp.parse(RESPSocket(skt))
-            reply = None
             print("+++ RECEIVED", rt)
             if rt.type == RESPTypeKind.ARRAY:
-                cmd = rt[0].value
-                match cmd:
-                    case "PING":
-                        reply = b"+PONG\r\n"
-                    case "ECHO":
-                        value = rt[1].value
-                        reply = f"${len(value)}\r\n{value}\r\n".encode("utf8")
-                    case _:
-                        pass
-
-            if reply:
+                reply = execute(rt)
                 print("+++ SENDING", reply)
                 if send(skt, reply) == -1:
                     break
+            else:
+                print("+++ NOT A COMMAND", rt)
+                continue
     except RESPError as e:
         print("Error in RESP : %s" % e)
     except RESPEot:
