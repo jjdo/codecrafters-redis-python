@@ -1,5 +1,5 @@
 from threading import Thread, current_thread
-from resp import RESP, RESPSocket, RESPEot, RESPError, RESPTypeKind
+from app.resp import RESP, RESPSocket, RESPEot, RESPError, RESPTypeKind
 import socket  # noqa: F401
 
 
