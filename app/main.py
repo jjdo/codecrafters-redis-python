@@ -1,19 +1,35 @@
 from threading import Thread, current_thread
+from resp import RESP, RESPSocket, RESPEot, RESPError, RESPTypeKind
 import socket  # noqa: F401
 
-# There is an async task accepting connections. For each connection, creates a task to process the commands from
-# that connection. The task is alive as long as the connection is alive.
-#
-# The connection task sits waiting for incoming messages and exeuctes them as soon as they appear.
 
 def connection(skt):
     print("serving connections on thread '%s'" % current_thread().name)
+    resp = RESP()
     try:
         while True:
-            if not (chunk := receive(skt)):
-                break
-            if (sent := send(skt, b"+PONG\r\n")) == -1:
-                break
+            rt = resp.parse(RESPSocket(skt))
+            reply = None
+            print("+++ RECEIVED", rt)
+            if rt.type == RESPTypeKind.ARRAY:
+                cmd = rt[0].value
+                match cmd:
+                    case "PING":
+                        reply = b"+PONG\r\n"
+                    case "ECHO":
+                        value = rt[1].value
+                        reply = f"${len(value)}\r\n{value}\r\n".encode("utf8")
+                    case _:
+                        pass
+
+            if reply:
+                print("+++ SENDING", reply)
+                if send(skt, reply) == -1:
+                    break
+    except RESPError as e:
+        print("Error in RESP : %s" % e)
+    except RESPEot:
+        print("Client disconnected while receving.")
     finally:
         skt.close()
 
@@ -29,7 +45,7 @@ def main():
 
     while True:
         print("Waiting for commands...")
-        (skt, _) = server_socket.accept() # wait for client
+        (skt, _) = server_socket.accept()  # wait for client
         # Launch thread using this socket.
         th = Thread(target=connection, name=f"socket {skt.fileno()}", args=(skt,))
         connections.append(th)
@@ -45,9 +61,9 @@ def receive(skt) -> bytes | None:
             print("Client disconnected while receving.")
             return None
         reply += r
-    
+
     return reply.strip()
-         
+
 
 def send(skt, msg: bytes) -> int:
     sent = 0
