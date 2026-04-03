@@ -10,6 +10,18 @@ def storage(monkeypatch):
     yield storage
 
 
+def test_ping():
+    ping_cmd = Array([BulkString("PING")])
+    reply = execute(ping_cmd)
+    assert reply == b"+PONG\r\n"
+
+
+def test_echo():
+    ping_cmd = Array([BulkString("ECHO"), BulkString("Hello!")])
+    reply = execute(ping_cmd)
+    assert reply == b"$6\r\nHello!\r\n"
+
+
 def test_set_get(storage):
     set_cmd = Array([BulkString("SET"), BulkString("name"), BulkString("Poirot")])
     reply = execute(set_cmd)

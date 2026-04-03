@@ -1,6 +1,6 @@
 """REDIS commands"""
 
-from app.resp import Array
+from app.resp import Array, SimpleString, BulkString, BulkNullString
 
 storage = {}
 
@@ -8,32 +8,17 @@ storage = {}
 def execute(cmd: Array) -> bytes:
     match cmd[0].value.upper():
         case "PING":
-            return b"+PONG\r\n"
+            return SimpleString("PONG").dump()
         case "ECHO":
-            return bulk_string(cmd[1].value)
+            return BulkString(cmd[1].value).dump()
         case "SET":
             key = cmd[1].value
             value = cmd[2].value
             storage[key] = value
-            return simple_string("OK")
+            return SimpleString("OK").dump()
         case "GET":
             key = cmd[1].value
             if value := storage.get(key):
-                return bulk_string(value)
+                return BulkString(value).dump()
             else:
-                return bulk_null_string()
-
-
-# Fuctions to generate replies - WIP
-
-
-def simple_string(value: str) -> bytes:
-    return f"+{value}\r\n".encode("utf8")
-
-
-def bulk_string(value: str) -> bytes:
-    return f"${len(value)}\r\n{value}\r\n".encode("utf8")
-
-
-def bulk_null_string() -> bytes:
-    return b"$-1\r\n"
+                return BulkNullString().dump()

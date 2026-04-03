@@ -117,6 +117,24 @@ class RESPType(ABC):
     def value(self) -> Any:
         pass
 
+    @abstractmethod
+    def dump(self) -> bytes:
+        pass
+
+
+class SimpleString(RESPType, type_=RESPTypeKind.SIMPLE_STR):
+    __slots__ = ("_value",)
+
+    def __init__(self, value: str):
+        self._value = value
+
+    @property
+    def value(self) -> str:
+        return self._value
+
+    def dump(self) -> bytes:
+        return f"+{self.value}\r\n".encode("utf8")
+
 
 class Array(RESPType, type_=RESPTypeKind.ARRAY):
     __slots__ = ("_items",)
@@ -131,6 +149,10 @@ class Array(RESPType, type_=RESPTypeKind.ARRAY):
     def value(self) -> Iterable[RESPType]:
         return self._items
 
+    def dump(self) -> bytes:
+        prefix = f"*{len(self._items)}\r\n".encode("utf8")
+        return b"".join((prefix, *map(lambda i: i.dump(), self._items)))
+
 
 class ArrayNull(RESPType, type_=RESPTypeKind.ARRAY_NULL):
     __slots__ = ()
@@ -138,6 +160,9 @@ class ArrayNull(RESPType, type_=RESPTypeKind.ARRAY_NULL):
     @property
     def value(self) -> None:
         return None
+
+    def dump(self) -> bytes:
+        return b"*-1\r\n"
 
 
 class BulkString(RESPType, type_=RESPTypeKind.BULK_STR):
@@ -150,6 +175,9 @@ class BulkString(RESPType, type_=RESPTypeKind.BULK_STR):
     def value(self) -> str:
         return self._value
 
+    def dump(self) -> bytes:
+        return f"${len(self.value)}\r\n{self.value}\r\n".encode("utf8")
+
 
 class BulkNullString(RESPType, type_=RESPTypeKind.BULK_NULL_STR):
     __slots__ = ()
@@ -157,6 +185,9 @@ class BulkNullString(RESPType, type_=RESPTypeKind.BULK_NULL_STR):
     @property
     def value(self) -> None:
         return None
+
+    def dump(self) -> bytes:
+        return b"$-1\r\n"
 
 
 # Parser ----------------------------------------------------------------------
@@ -287,6 +318,11 @@ class RESP:
         else:
             return None
 
+    def simple_string(self) -> SimpleString:
+        if not (s := self.str_()):
+            self.raise_error(f"Expected string literal")
+        return SimpleString(s.decode("utf8"))
+
     def bulk_string(self) -> BulkString:
         if v := self.int_():
             if self.is_unsigned(v):
@@ -324,9 +360,9 @@ class RESP:
 
     # Not implemented ---------------------------------------------------------
 
-    def not_implemented(self, tail):
+    def not_implemented(self):
         raise NotImplementedError
 
-    simple_string = simple_error = integer = null = boolean = double = big_number = (
-        bulk_error
-    ) = verbatim_string = map = attribute = set = push = not_implemented
+    simple_error = integer = null = boolean = double = big_number = bulk_error = (
+        verbatim_string
+    ) = map = attribute = set = push = not_implemented
