@@ -1,15 +1,14 @@
 from threading import Thread, current_thread
-from app.resp import RESP, RESPSocket, RESPEot, RESPError, RESPTypeKind
+from app.resp import parse, RESPSocket, RESPEot, RESPError, RESPTypeKind
 from app.cmd import execute
 import socket  # noqa: F401
 
 
 def connection(skt):
     print("serving connections on thread '%s'" % current_thread().name)
-    resp = RESP()
     try:
         while True:
-            rt = resp.parse(RESPSocket(skt))
+            rt = parse(RESPSocket(skt))
             print("+++ RECEIVED", rt)
             if rt.type == RESPTypeKind.ARRAY:
                 reply = execute(rt)
@@ -19,10 +18,10 @@ def connection(skt):
             else:
                 print("+++ NOT A COMMAND", rt)
                 continue
-    except RESPError as e:
-        print("Error in RESP : %s" % e)
     except RESPEot:
         print("Client disconnected while receving.")
+    except RESPError as e:
+        print("Error in RESP : %s" % e)
     finally:
         skt.close()
 

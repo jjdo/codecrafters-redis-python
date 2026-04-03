@@ -6,6 +6,11 @@ from typing import Any, Iterable
 import io
 import re
 
+
+def parse(data: RESPStream) -> bytes:
+    return RESP().parse(data)
+
+
 # Exceptions ------------------------------------------------------------------
 
 
@@ -15,7 +20,7 @@ class RESPError(ValueError):
     pass
 
 
-class RESPEot(Exception):
+class RESPEot(RESPError):
     """EOT before end of RESP type parsing."""
 
     pass
@@ -106,7 +111,7 @@ class RESPType(ABC):
         return self.type == other.type and self.value == other.value
 
     def __repr__(self) -> str:
-        return f"<RESPType.{self.type.name}  {self.value}>"
+        return f"<RESPType.{self.type.name} {self.value}>"
 
     @property
     def type(self) -> RESPTypeKind:
@@ -243,6 +248,8 @@ RE_UINT_LITERAL = re.compile(rb"([0-9]+)\r\n")
 
 
 class RESP:
+    __slots__ = ("data",)
+
     """RESP parser"""
 
     def __init__(self):
@@ -320,7 +327,7 @@ class RESP:
 
     def simple_string(self) -> SimpleString:
         if not (s := self.str_()):
-            self.raise_error(f"Expected string literal")
+            self.raise_error("Expected string literal")
         return SimpleString(s.decode("utf8"))
 
     def bulk_string(self) -> BulkString:
