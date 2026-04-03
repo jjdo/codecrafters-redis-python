@@ -41,7 +41,7 @@ def execute(cmd: Array) -> bytes:
                 match cmd[3].value:
                     case "EX":
                         expiry = int(cmd[4].value) * 1000
-                    case "FX":
+                    case "PX":
                         expiry = int(cmd[4].value)
                     case _:
                         raise NotImplementedError
