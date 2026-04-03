@@ -147,6 +147,9 @@ class Array(RESPType, type_=RESPTypeKind.ARRAY):
     def __init__(self, items: Iterable[RESPType]):
         self._items = items
 
+    def __len__(self) -> int:
+        return len(self._items)
+
     def __getitem__(self, i: int) -> RESPType:
         return self._items[i]
 
