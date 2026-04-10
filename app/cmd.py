@@ -2,7 +2,13 @@
 
 from typing import Any
 from time import time_ns
-from app.resp import Array, SimpleString, BulkString, BulkNullString
+from app.resp import (
+    RESPType,
+    Array,
+    SimpleString,
+    BulkString,
+    BulkNullString,
+)
 
 
 class Stored:
@@ -27,12 +33,12 @@ def time_ms() -> int:
 storage: dict[str, Stored] = {}
 
 
-def execute(cmd: Array) -> bytes:
+def execute(cmd: Array) -> RESPType:
     match cmd[0].value.upper():
         case "PING":
-            return SimpleString("PONG").dump()
+            return SimpleString("PONG")
         case "ECHO":
-            return BulkString(cmd[1].value).dump()
+            return BulkString(cmd[1].value)
         case "SET":
             key = cmd[1].value
             value = cmd[2].value
@@ -48,12 +54,12 @@ def execute(cmd: Array) -> bytes:
                 storage[key] = Stored(value, expiry)
             else:
                 storage[key] = Stored(value)
-            return SimpleString("OK").dump()
+            return SimpleString("OK")
         case "GET":
             key = cmd[1].value
             if (stored := storage.get(key)) and not stored.expired():
-                return BulkString(stored.value).dump()
+                return BulkString(stored.value)
             else:
-                return BulkNullString().dump()
+                return BulkNullString()
         case _:
             raise NotImplementedError

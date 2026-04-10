@@ -4,12 +4,7 @@ from abc import ABC, abstractmethod
 from enum import IntEnum, auto
 from typing import Any, Iterable
 import asyncio
-import io
 import re
-
-
-def parse(data: RESPStream) -> bytes:
-    return RESP().parse(data)
 
 
 # Exceptions ------------------------------------------------------------------
@@ -27,71 +22,22 @@ class RESPEot(RESPError):
     pass
 
 
-# Sync data streams ----------------------------------------------------------------
-
-
-class RESPStream(ABC):
-    """Abstract RESP stream base class."""
-
-    @abstractmethod
-    def read_byte(self) -> bytes:
-        pass
-
-    @abstractmethod
-    def read_delimited(self) -> bytes:
-        pass
-
-
-class RESPBuffered(RESPStream):
-    """Reads RESP data from a buffered binary stream (i.e. io.IOBytes)"""
-
-    def __init__(self, buff: io.BufferedIOBase):
-        self.buff = buff
-
-    def read_byte(self) -> bytes:
-        r = self.buff.read(1)
-        if not r:
-            raise RESPEot
-        return r
-
-    def read_delimited(self) -> bytes:
-        r = b""
-        while not r.endswith(b"\r\n"):
-            r += self.read_byte()
-        return r
-
-
-class RESPSocket(RESPStream):
-    """Reads RESP data from a TCP socket."""
-
-    def __init__(self, skt):
-        self.skt = skt
-
-    def read_byte(self) -> bytes:
-        r = self.skt.recv(1)
-        if not r:
-            raise RESPEot
-        return r
-
-    def read_delimited(self) -> bytes:
-        r = b""
-        while not r.endswith(b"\r\n"):
-            r += self.read_byte()
-        return r
-
-
-# Async data streams ----------------------------------------------------------
-
-
-class AsyncRESPStream:
+class RESPStream:
     def __init__(self, reader: asyncio.StreamReader):
         self.reader = reader
 
     async def read_byte(self) -> bytes:
-        pass
+        r = await self.reader.read(1)
+        if not r:
+            self.reader.feed_eof()
+            raise RESPEot
+        return r
 
     async def read_delimited(self) -> bytes:
-        pass
+        r = b""
+        while not r.endswith(b"\r\n"):
+            r += await self.read_byte()
+        return r
 
 
 # RESP types -----------------------------------------------------------------
@@ -139,10 +85,6 @@ class RESPType(ABC):
     def value(self) -> Any:
         pass
 
-    @abstractmethod
-    def dump(self) -> bytes:
-        pass
-
 
 class SimpleString(RESPType, type_=RESPTypeKind.SIMPLE_STR):
     __slots__ = ("_value",)
@@ -153,9 +95,6 @@ class SimpleString(RESPType, type_=RESPTypeKind.SIMPLE_STR):
     @property
     def value(self) -> str:
         return self._value
-
-    def dump(self) -> bytes:
-        return f"+{self.value}\r\n".encode("utf8")
 
 
 class Array(RESPType, type_=RESPTypeKind.ARRAY):
@@ -170,13 +109,12 @@ class Array(RESPType, type_=RESPTypeKind.ARRAY):
     def __getitem__(self, i: int) -> RESPType:
         return self._items[i]
 
+    def __iter__(self):
+        return iter(self._items)
+
     @property
     def value(self) -> Iterable[RESPType]:
         return self._items
-
-    def dump(self) -> bytes:
-        prefix = f"*{len(self._items)}\r\n".encode("utf8")
-        return b"".join((prefix, *map(lambda i: i.dump(), self._items)))
 
 
 class ArrayNull(RESPType, type_=RESPTypeKind.ARRAY_NULL):
@@ -185,9 +123,6 @@ class ArrayNull(RESPType, type_=RESPTypeKind.ARRAY_NULL):
     @property
     def value(self) -> None:
         return None
-
-    def dump(self) -> bytes:
-        return b"*-1\r\n"
 
 
 class BulkString(RESPType, type_=RESPTypeKind.BULK_STR):
@@ -200,9 +135,6 @@ class BulkString(RESPType, type_=RESPTypeKind.BULK_STR):
     def value(self) -> str:
         return self._value
 
-    def dump(self) -> bytes:
-        return f"${len(self.value)}\r\n{self.value}\r\n".encode("utf8")
-
 
 class BulkNullString(RESPType, type_=RESPTypeKind.BULK_NULL_STR):
     __slots__ = ()
@@ -211,11 +143,13 @@ class BulkNullString(RESPType, type_=RESPTypeKind.BULK_NULL_STR):
     def value(self) -> None:
         return None
 
-    def dump(self) -> bytes:
-        return b"$-1\r\n"
-
 
 # Parser ----------------------------------------------------------------------
+
+
+async def parse(data: RESPStream) -> bytes:
+    return await RESP().parse(data)
+
 
 # Grammar (https://redis.io/docs/latest/develop/reference/protocol-spec/)
 #
@@ -276,60 +210,60 @@ class RESP:
         self.data = None
 
     # Parse **one** type.
-    def parse(self, data: RESPStream) -> bytes:
+    async def parse(self, data: RESPStream) -> bytes:
         self.data = data
-        return self.type_()
+        return await self.type_()
 
     # Rules -------------------------------------------------------------------
 
-    def type_(self) -> RESPType:
-        match self.data.read_byte():
+    async def type_(self) -> RESPType:
+        match await self.data.read_byte():
             case b"+":
-                return self.simple_string()
+                return await self.simple_string()
             case "-":
-                return self.simple_error()
+                return await self.simple_error()
             case b":":
-                return self.integer()
+                return await self.integer()
             case b"$":
-                return self.bulk_string()
+                return await self.bulk_string()
             case b"*":
-                return self.array()
+                return await self.array()
             case b"_":
-                return self.null()
+                return await self.null()
             case b"#":
-                return self.boolean()
+                return await self.boolean()
             case b",":
-                return self.double()
+                return await self.double()
             case b"(":
-                return self.big_number()
+                return await self.big_number()
             case b"!":
-                return self.bulk_error()
+                return await self.bulk_error()
             case b"=":
-                return self.verbatim_string()
+                return await self.verbatim_string()
             case b"%":
-                return self.map()
+                return await self.map()
             case b"|":
-                return self.attribute()
+                return await self.attribute()
             case b"~":
-                return self.set()
+                return await self.set()
             case b">":
-                return self.push()
+                return await self.push()
             case other:
                 self.raise_error(f"Invalid REDIS type {other}")
 
-    def int_(
+    async def int_(
         self,
     ) -> bytes | None:
-        d = self.data.read_delimited()
+        d = await self.data.read_delimited()
         if m := RE_INT_LITERAL.match(d):
             return m.group(1)
         else:
             return None
 
-    def uint_(
+    async def uint_(
         self,
     ) -> bytes | None:
-        d = self.data.read_delimited()
+        d = await self.data.read_delimited()
         if m := RE_UINT_LITERAL.match(d):
             return m.group(1)
         else:
@@ -338,24 +272,24 @@ class RESP:
     def is_unsigned(self, int_literal: bytes) -> bool:
         return not int_literal.startswith((b"+", b"-"))
 
-    def str_(self) -> bytes:
-        d = self.data.read_delimited()
+    async def str_(self) -> bytes:
+        d = await self.data.read_delimited()
         if m := RE_STR_LITERAL.match(d):
             return m.group(1)
         else:
             return None
 
-    def simple_string(self) -> SimpleString:
-        if not (s := self.str_()):
+    async def simple_string(self) -> SimpleString:
+        if not (s := await self.str_()):
             self.raise_error("Expected string literal")
         return SimpleString(s.decode("utf8"))
 
-    def bulk_string(self) -> BulkString:
-        if v := self.int_():
+    async def bulk_string(self) -> BulkString:
+        if v := await self.int_():
             if self.is_unsigned(v):
                 if (length := int(v)) > 0:
-                    s = self.str_()
-                    if len(s) != length:
+                    s = await self.str_()
+                    if s is None or len(s) != length:
                         self.raise_error(f"Expected string literal of length {length}")
                     s = s.decode("utf8")
                 else:
@@ -366,12 +300,12 @@ class RESP:
 
         self.raise_error(f"Invalid bulk string format {self.data}")
 
-    def array(self) -> dict:
-        if v := self.int_():
+    async def array(self) -> dict:
+        if v := await self.int_():
             if self.is_unsigned(v):
                 if (n_items := int(v)) > 0:
                     try:
-                        items = [self.type_() for _ in range(n_items)]
+                        items = [await self.type_() for _ in range(n_items)]
                     except RESPEot:
                         self.raise_error(f"Expected string array of length {n_items}")
                 else:
@@ -387,9 +321,54 @@ class RESP:
 
     # Not implemented ---------------------------------------------------------
 
-    def not_implemented(self):
+    async def not_implemented(self):
         raise NotImplementedError
 
     simple_error = integer = null = boolean = double = big_number = bulk_error = (
         verbatim_string
     ) = map = attribute = set = push = not_implemented
+
+
+# Dump ------------------------------------------------------------------------
+
+
+def dump(resp: RESPType) -> bytes:
+    def not_implemented():
+        raise NotImplementedError
+
+    match resp.type:
+        case RESPTypeKind.SIMPLE_STR:
+            return f"+{resp.value}\r\n".encode("utf8")
+        case RESPTypeKind.SIMPLE_ERROR:
+            not_implemented()
+        case RESPTypeKind.INTEGER:
+            not_implemented()
+        case RESPTypeKind.BULK_STR:
+            return f"${len(resp.value)}\r\n{resp.value}\r\n".encode("utf8")
+        case RESPTypeKind.BULK_NULL_STR:
+            return b"$-1\r\n"
+        case RESPTypeKind.ARRAY:
+            prefix = f"*{len(resp)}\r\n".encode("utf8")
+            return b"".join((prefix, *map(dump, resp)))
+        case RESPTypeKind.ARRAY_NULL:
+            return b"*-1\r\n"
+        case RESPTypeKind.NULL:
+            not_implemented()
+        case RESPTypeKind.BOOLEAN:
+            not_implemented()
+        case RESPTypeKind.DOUBLE:
+            not_implemented()
+        case RESPTypeKind.BIG_NUMBER:
+            not_implemented()
+        case RESPTypeKind.BULK_ERROR:
+            not_implemented()
+        case RESPTypeKind.VERBATIM_STR:
+            not_implemented()
+        case RESPTypeKind.MAP:
+            not_implemented()
+        case RESPTypeKind.ATTRIBUTE:
+            not_implemented()
+        case RESPTypeKind.SET:
+            not_implemented()
+        case RESPTypeKind.PUSH:
+            not_implemented()

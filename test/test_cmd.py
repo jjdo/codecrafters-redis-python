@@ -1,5 +1,5 @@
 from app.cmd import execute, Stored, time_ms
-from app.resp import Array, BulkString
+from app.resp import Array, BulkString, dump
 import pytest
 
 
@@ -13,30 +13,30 @@ def storage(monkeypatch):
 def test_ping():
     ping_cmd = Array([BulkString("PING")])
     reply = execute(ping_cmd)
-    assert reply == b"+PONG\r\n"
+    assert dump(reply) == b"+PONG\r\n"
 
 
 def test_echo():
     ping_cmd = Array([BulkString("ECHO"), BulkString("Hello!")])
     reply = execute(ping_cmd)
-    assert reply == b"$6\r\nHello!\r\n"
+    assert dump(reply) == b"$6\r\nHello!\r\n"
 
 
 def test_set_get(storage):
     set_cmd = Array([BulkString("SET"), BulkString("name"), BulkString("Poirot")])
     reply = execute(set_cmd)
-    assert reply == b"+OK\r\n"
+    assert dump(reply) == b"+OK\r\n"
     assert storage["name"].value == "Poirot"
 
     get_cmd = Array([BulkString("GET"), BulkString("name")])
     reply = execute(get_cmd)
-    assert reply == b"$6\r\nPoirot\r\n"
+    assert dump(reply) == b"$6\r\nPoirot\r\n"
 
 
 def test_get_missing(storage):
     get_cmd = Array([BulkString("GET"), BulkString("name")])
     reply = execute(get_cmd)
-    assert reply == b"$-1\r\n"
+    assert dump(reply) == b"$-1\r\n"
 
 
 def test_stored():

@@ -1,5 +1,5 @@
 import asyncio
-from app.async_resp import parse, RESPStream, RESPEot, RESPError, RESPTypeKind
+from app.resp import dump, parse, RESPStream, RESPEot, RESPError, RESPTypeKind
 from app.cmd import execute
 
 
@@ -14,7 +14,7 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
             rt = await parse(RESPStream(reader))
             print("+++ RECEIVED", rt)
             if rt.type == RESPTypeKind.ARRAY:
-                reply = execute(rt)
+                reply = dump(execute(rt))
                 print("+++ SENDING", reply)
                 await writer.write(reply)
             else:
