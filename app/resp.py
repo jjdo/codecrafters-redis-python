@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum, auto
 from typing import Any, Iterable
-import asyncio
+import io
 import re
 
 
@@ -22,21 +22,58 @@ class RESPEot(RESPError):
     pass
 
 
-class RESPStream:
-    def __init__(self, reader: asyncio.StreamReader):
-        self.reader = reader
+# Read RESP data --------------------------------------------------------------
 
-    async def read_byte(self) -> bytes:
-        r = await self.reader.read(1)
+
+class RESPStream(ABC):
+    __slots__ = ()
+
+    @abstractmethod
+    def read_byte(self) -> bytes:
+        pass
+
+    @abstractmethod
+    def read_delimited(self) -> bytes:
+        pass
+
+
+class RESPSocket(RESPStream):
+    """Reads RESP data from a TCP socket."""
+
+    __slots__ = ("skt",)
+
+    def __init__(self, skt):
+        self.skt = skt
+
+    def read_byte(self) -> bytes:
+        r = self.skt.recv(1)
         if not r:
-            self.reader.feed_eof()
             raise RESPEot
         return r
 
-    async def read_delimited(self) -> bytes:
+    def read_delimited(self) -> bytes:
         r = b""
         while not r.endswith(b"\r\n"):
-            r += await self.read_byte()
+            r += self.read_byte()
+        return r
+
+
+class RESPBuffered(RESPStream):
+    """Reads RESP data from a buffered binary stream (i.e. io.IOBytes)"""
+
+    def __init__(self, buff: io.BufferedIOBase):
+        self.buff = buff
+
+    def read_byte(self) -> bytes:
+        r = self.buff.read(1)
+        if not r:
+            raise RESPEot
+        return r
+
+    def read_delimited(self) -> bytes:
+        r = b""
+        while not r.endswith(b"\r\n"):
+            r += self.read_byte()
         return r
 
 
@@ -147,8 +184,8 @@ class BulkNullString(RESPType, type_=RESPTypeKind.BULK_NULL_STR):
 # Parser ----------------------------------------------------------------------
 
 
-async def parse(data: RESPStream) -> bytes:
-    return await RESP().parse(data)
+def parse(data: RESPStream) -> bytes:
+    return RESP().parse(data)
 
 
 # Grammar (https://redis.io/docs/latest/develop/reference/protocol-spec/)
@@ -210,60 +247,60 @@ class RESP:
         self.data = None
 
     # Parse **one** type.
-    async def parse(self, data: RESPStream) -> bytes:
+    def parse(self, data: RESPStream) -> bytes:
         self.data = data
-        return await self.type_()
+        return self.type_()
 
     # Rules -------------------------------------------------------------------
 
-    async def type_(self) -> RESPType:
-        match await self.data.read_byte():
+    def type_(self) -> RESPType:
+        match self.data.read_byte():
             case b"+":
-                return await self.simple_string()
+                return self.simple_string()
             case "-":
-                return await self.simple_error()
+                return self.simple_error()
             case b":":
-                return await self.integer()
+                return self.integer()
             case b"$":
-                return await self.bulk_string()
+                return self.bulk_string()
             case b"*":
-                return await self.array()
+                return self.array()
             case b"_":
-                return await self.null()
+                return self.null()
             case b"#":
-                return await self.boolean()
+                return self.boolean()
             case b",":
-                return await self.double()
+                return self.double()
             case b"(":
-                return await self.big_number()
+                return self.big_number()
             case b"!":
-                return await self.bulk_error()
+                return self.bulk_error()
             case b"=":
-                return await self.verbatim_string()
+                return self.verbatim_string()
             case b"%":
-                return await self.map()
+                return self.map()
             case b"|":
-                return await self.attribute()
+                return self.attribute()
             case b"~":
-                return await self.set()
+                return self.set()
             case b">":
-                return await self.push()
+                return self.push()
             case other:
                 self.raise_error(f"Invalid REDIS type {other}")
 
-    async def int_(
+    def int_(
         self,
     ) -> bytes | None:
-        d = await self.data.read_delimited()
+        d = self.data.read_delimited()
         if m := RE_INT_LITERAL.match(d):
             return m.group(1)
         else:
             return None
 
-    async def uint_(
+    def uint_(
         self,
     ) -> bytes | None:
-        d = await self.data.read_delimited()
+        d = self.data.read_delimited()
         if m := RE_UINT_LITERAL.match(d):
             return m.group(1)
         else:
@@ -272,23 +309,24 @@ class RESP:
     def is_unsigned(self, int_literal: bytes) -> bool:
         return not int_literal.startswith((b"+", b"-"))
 
-    async def str_(self) -> bytes:
-        d = await self.data.read_delimited()
+    def str_(self) -> bytes:
+        d = self.data.read_delimited()
         if m := RE_STR_LITERAL.match(d):
             return m.group(1)
         else:
             return None
 
-    async def simple_string(self) -> SimpleString:
-        if not (s := await self.str_()):
+    def simple_string(self) -> SimpleString:
+        if not (s := self.str_()):
             self.raise_error("Expected string literal")
         return SimpleString(s.decode("utf8"))
 
-    async def bulk_string(self) -> BulkString:
-        if v := await self.int_():
+    def bulk_string(self) -> BulkString:
+        if v := self.int_():
             if self.is_unsigned(v):
                 if (length := int(v)) > 0:
-                    s = await self.str_()
+                    s = self.str_()
+                    print("**** bulk_string <-", s)
                     if s is None or len(s) != length:
                         self.raise_error(f"Expected string literal of length {length}")
                     s = s.decode("utf8")
@@ -300,12 +338,12 @@ class RESP:
 
         self.raise_error(f"Invalid bulk string format {self.data}")
 
-    async def array(self) -> dict:
-        if v := await self.int_():
+    def array(self) -> dict:
+        if v := self.int_():
             if self.is_unsigned(v):
                 if (n_items := int(v)) > 0:
                     try:
-                        items = [await self.type_() for _ in range(n_items)]
+                        items = [self.type_() for _ in range(n_items)]
                     except RESPEot:
                         self.raise_error(f"Expected string array of length {n_items}")
                 else:

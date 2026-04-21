@@ -16,8 +16,8 @@ def main():
     # Create 3 threads each sending one command.
     commands = [
         ("PING", b"*1\r\n$4\r\nPING\r\n"),
-        ("ECHO 1", b"*2\r\n$4\r\nECHO$6\r\nHello!\r\n"),
-        ("ECHO 2", b"*2\r\n$4\r\nECHO$4\r\nBye!\r\n"),
+        ("ECHO 1", b"*2\r\n$4\r\nECHO\r\n$6\r\nHello!\r\n"),
+        ("ECHO 2", b"*2\r\n$4\r\nECHO\r\n$4\r\nBye!\r\n"),
     ]
     threads = [
         threading.Thread(
