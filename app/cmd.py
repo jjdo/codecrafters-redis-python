@@ -8,6 +8,7 @@ from app.resp import (
     SimpleString,
     BulkString,
     BulkNullString,
+    Integer,
 )
 
 
@@ -61,5 +62,15 @@ def execute(cmd: Array) -> RESPType:
                 return BulkString(stored.value)
             else:
                 return BulkNullString()
+        case "RPUSH":
+            print("**** RPUSH command ->", cmd)
+            # At present, only one value supported
+            key = cmd[1].value
+            value = cmd[2].value
+            if key not in storage:
+                storage[key] = [Stored(value)]
+            else:
+                storage[key].append(Stored(value))
+            return Integer(len(storage[key]))
         case _:
             raise NotImplementedError

@@ -7,6 +7,7 @@ from app.resp import (
     BulkString,
     BulkNullString,
     SimpleString,
+    Integer,
     parse,
     dump,
 )
@@ -113,3 +114,20 @@ def test_array_dump():
         dump(Array([BulkString("name"), BulkString("Poirot")]))
         == b"*2\r\n$4\r\nname\r\n$6\r\nPoirot\r\n"
     )
+
+
+@pytest.mark.parametrize(
+    "integer, expected",
+    [
+        (b":64\r\n", 64),
+        (b":+64\r\n", 64),
+        (b":-64\r\n", -64),
+    ],
+)
+def test_integer(integer, expected, resp_stream):
+    assert parse(resp_stream(integer)) == Integer(expected)
+
+
+def test_integer_dump():
+    assert dump(Integer(64)) == b":64\r\n"
+    assert dump(Integer(-64)) == b":-64\r\n"

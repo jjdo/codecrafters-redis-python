@@ -181,10 +181,21 @@ class BulkNullString(RESPType, type_=RESPTypeKind.BULK_NULL_STR):
         return None
 
 
+class Integer(RESPType, type_=RESPTypeKind.INTEGER):
+    __slots__ = ("_value",)
+
+    def __init__(self, value: int):
+        self._value = value
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+
 # Parser ----------------------------------------------------------------------
 
 
-def parse(data: RESPStream) -> bytes:
+def parse(data: RESPStream) -> RESPType:
     return RESP().parse(data)
 
 
@@ -247,7 +258,7 @@ class RESP:
         self.data = None
 
     # Parse **one** type.
-    def parse(self, data: RESPStream) -> bytes:
+    def parse(self, data: RESPStream) -> RESPType:
         self.data = data
         return self.type_()
 
@@ -338,7 +349,7 @@ class RESP:
 
         self.raise_error(f"Invalid bulk string format {self.data}")
 
-    def array(self) -> dict:
+    def array(self) -> Array | ArrayNull:
         if v := self.int_():
             if self.is_unsigned(v):
                 if (n_items := int(v)) > 0:
@@ -354,15 +365,20 @@ class RESP:
 
         self.raise_error(f"Invalid array format {self.data}")
 
+    def integer(self) -> Integer:
+        if (v := self.int_()) and v is not None:
+            return Integer(int(v))
+        self.raise_error(f"Invalid integer format {self.data}")
+
     def raise_error(self, msg: str):
         raise RESPError(msg)
 
     # Not implemented ---------------------------------------------------------
 
-    async def not_implemented(self):
+    def not_implemented(self):
         raise NotImplementedError
 
-    simple_error = integer = null = boolean = double = big_number = bulk_error = (
+    simple_error = null = boolean = double = big_number = bulk_error = (
         verbatim_string
     ) = map = attribute = set = push = not_implemented
 
@@ -380,7 +396,7 @@ def dump(resp: RESPType) -> bytes:
         case RESPTypeKind.SIMPLE_ERROR:
             not_implemented()
         case RESPTypeKind.INTEGER:
-            not_implemented()
+            return f":{resp.value}\r\n".encode("utf8")
         case RESPTypeKind.BULK_STR:
             return f"${len(resp.value)}\r\n{resp.value}\r\n".encode("utf8")
         case RESPTypeKind.BULK_NULL_STR:
