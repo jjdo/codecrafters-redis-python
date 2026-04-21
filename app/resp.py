@@ -337,7 +337,6 @@ class RESP:
             if self.is_unsigned(v):
                 if (length := int(v)) > 0:
                     s = self.str_()
-                    print("**** bulk_string <-", s)
                     if s is None or len(s) != length:
                         self.raise_error(f"Expected string literal of length {length}")
                     s = s.decode("utf8")

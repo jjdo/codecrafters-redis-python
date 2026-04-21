@@ -63,7 +63,6 @@ def execute(cmd: Array) -> RESPType:
             else:
                 return BulkNullString()
         case "RPUSH":
-            print("**** RPUSH command ->", cmd)
             # At present, only one value supported
             key = cmd[1].value
             value = cmd[2].value
