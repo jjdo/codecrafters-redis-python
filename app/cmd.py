@@ -12,6 +12,10 @@ from app.resp import (
 )
 
 
+class InvalidCommand(Exception):
+    pass
+
+
 class Stored:
     def __init__(self, value: Any, expiry_ms: int = 0):
         self.value = value
@@ -35,6 +39,7 @@ storage: dict[str, Stored] = {}
 
 
 def execute(cmd: Array) -> RESPType:
+    # cmd[0] is the command name
     match cmd[0].value.upper():
         case "PING":
             return SimpleString("PONG")
@@ -63,13 +68,14 @@ def execute(cmd: Array) -> RESPType:
             else:
                 return BulkNullString()
         case "RPUSH":
-            # At present, only one value supported
-            key = cmd[1].value
-            value = cmd[2].value
-            if key not in storage:
-                storage[key] = [Stored(value)]
-            else:
-                storage[key].append(Stored(value))
-            return Integer(len(storage[key]))
+            # Expect at least one key and one value.
+            if len(cmd) > 2:
+                values = map(lambda v: v.value, cmd[2:])
+                if (key := cmd[1].value) not in storage:
+                    storage[key] = Stored(list(values))
+                else:
+                    storage[key].value.extend(values)
+                return Integer(len(storage[key].value))
+            raise InvalidCommand("RPUSH: expected a key and at least one value")
         case _:
             raise NotImplementedError
