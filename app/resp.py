@@ -122,6 +122,9 @@ class RESPType(ABC):
     def value(self) -> Any:
         pass
 
+    def is_type(self, expected: RESPTypeKind) -> bool:
+        self.type == expected
+
 
 class SimpleString(RESPType, type_=RESPTypeKind.SIMPLE_STR):
     __slots__ = ("_value",)

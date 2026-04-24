@@ -1,37 +1,40 @@
 from app.cmd import execute, InvalidCommand
-from app.resp import Array, BulkString, dump
+from app.resp import (
+    Array,
+    ArrayNull,
+    BulkString,
+    BulkNullString,
+    SimpleString,
+    Integer,
+    dump,
+)
 import pytest
 
 
 def test_ping():
     ping_cmd = Array([BulkString("PING")])
-    reply = execute(ping_cmd)
-    assert dump(reply) == b"+PONG\r\n"
+    assert execute(ping_cmd) == SimpleString("PONG")
 
 
 def test_echo():
-    ping_cmd = Array([BulkString("ECHO"), BulkString("Hello!")])
-    reply = execute(ping_cmd)
-    assert dump(reply) == b"$6\r\nHello!\r\n"
+    echo_cmd = Array([BulkString("ECHO"), BulkString("Hello!")])
+    assert execute(echo_cmd) == BulkString("Hello!")
 
 
 def test_set_get(storage):
     set_cmd = Array(
         [BulkString("SET"), BulkString("name"), BulkString("Hercules Poirot")]
     )
-    reply = execute(set_cmd)
-    assert dump(reply) == b"+OK\r\n"
+    assert execute(set_cmd) == SimpleString("OK")
     assert storage.get("name") == "Hercules Poirot"
 
     get_cmd = Array([BulkString("GET"), BulkString("name")])
-    reply = execute(get_cmd)
-    assert dump(reply) == b"$15\r\nHercules Poirot\r\n"
+    assert execute(get_cmd) == BulkString("Hercules Poirot")
 
 
 def test_get_missing(storage):
     get_cmd = Array([BulkString("GET"), BulkString("name")])
-    reply = execute(get_cmd)
-    assert dump(reply) == b"$-1\r\n"
+    assert execute(get_cmd) == BulkNullString()
 
 
 def test_rpush(storage):
@@ -43,8 +46,7 @@ def test_rpush(storage):
             BulkString("Hercules Poirot"),
         ]
     )
-    reply = execute(rpush_cmd)
-    assert dump(reply) == b":2\r\n"
+    assert execute(rpush_cmd) == Integer(2)
     assert storage.get("sleuths") == ["Sherlock Holmes", "Hercules Poirot"]
 
     # Append more
@@ -55,8 +57,7 @@ def test_rpush(storage):
             BulkString("Pepe Carvalho"),
         ]
     )
-    reply = execute(rpush_cmd)
-    assert dump(reply) == b":3\r\n"
+    assert execute(rpush_cmd) == Integer(3)
     assert storage["sleuths"].value == [
         "Sherlock Holmes",
         "Hercules Poirot",
@@ -66,5 +67,107 @@ def test_rpush(storage):
 
 def test_rpush_invalid(storage):
     with pytest.raises(InvalidCommand):
-        rpush_cmd = Array([BulkString("RPUSH"), BulkString("name")])
-        execute(rpush_cmd)
+        execute(Array([BulkString("RPUSH"), BulkString("name")]))
+
+
+@pytest.fixture
+def sleuths(storage):
+    assert execute(
+        Array(
+            [
+                BulkString("RPUSH"),
+                BulkString("sleuths"),
+                BulkString("Sherlock Holmes"),
+                BulkString("Hercules Poirot"),
+                BulkString("Pepe Carvalho"),
+            ]
+        )
+    ) == Integer(3)
+    yield storage
+
+
+def test_lrange(sleuths):
+    lrange_cmd = Array(
+        [
+            BulkString("LRANGE"),
+            BulkString("sleuths"),
+            Integer(0),
+            Integer(2),
+        ]
+    )
+    assert execute(lrange_cmd) == Array(
+        [
+            BulkString("Sherlock Holmes"),
+            BulkString("Hercules Poirot"),
+            BulkString("Pepe Carvalho"),
+        ]
+    )
+
+    lrange_cmd = Array(
+        [
+            BulkString("LRANGE"),
+            BulkString("sleuths"),
+            Integer(0),
+            Integer(1),
+        ]
+    )
+    assert execute(lrange_cmd) == Array(
+        [
+            BulkString("Sherlock Holmes"),
+            BulkString("Hercules Poirot"),
+        ]
+    )
+
+
+def test_lrange_missing(storage):
+    lrange_cmd = Array(
+        [
+            BulkString("LRANGE"),
+            BulkString("sleuths"),
+            Integer(0),
+            Integer(2),
+        ]
+    )
+    assert execute(lrange_cmd) == ArrayNull()
+
+
+def test_lrange_start_index_ge_length(sleuths):
+    lrange_cmd = Array(
+        [
+            BulkString("LRANGE"),
+            BulkString("sleuths"),
+            Integer(100),
+            Integer(102),
+        ]
+    )
+    assert execute(lrange_cmd) == ArrayNull()
+
+
+def test_lrange_start_index_ge_end_index(sleuths):
+    lrange_cmd = Array(
+        [
+            BulkString("LRANGE"),
+            BulkString("sleuths"),
+            Integer(2),
+            Integer(0),
+        ]
+    )
+    assert execute(lrange_cmd) == ArrayNull()
+
+
+def test_lrange_end_index_ge_length(sleuths):
+    lrange_cmd = Array(
+        [
+            BulkString("LRANGE"),
+            BulkString("sleuths"),
+            Integer(0),
+            Integer(100),
+        ]
+    )
+    assert execute(lrange_cmd) == Array(
+        [
+            BulkString("Sherlock Holmes"),
+            BulkString("Hercules Poirot"),
+            BulkString("Pepe Carvalho"),
+        ]
+    )
