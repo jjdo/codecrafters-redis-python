@@ -101,7 +101,11 @@ def lrange(args: Array) -> RESPType:
         return Array([])
 
     start, stop = map(int, (args[1].value, args[2].value))
-    if start > stop or start > len(slist):
+    if start < 0:
+        start = max(0, len(slist) + start)
+    if stop < 0:
+        stop = max(0, len(slist) + stop)
+    if start >= stop or start > len(slist):
         return Array([])
 
     return Array(list(map(BulkString, slist[start : (stop + 1)])))

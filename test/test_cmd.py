@@ -124,3 +124,21 @@ def test_lrange_end_index_ge_length(sleuths):
             BulkString("Pepe Carvalho"),
         ]
     )
+
+
+def test_lrange_negative(sleuths):
+    lrange_cmd = redis_cmd("LRANGE", "sleuths", "-2", "-1")
+    assert execute(lrange_cmd) == Array(
+        [
+            BulkString("Hercules Poirot"),
+            BulkString("Pepe Carvalho"),
+        ]
+    )
+
+    lrange_cmd = redis_cmd("LRANGE", "sleuths", "1", "-1")
+    assert execute(lrange_cmd) == Array(
+        [
+            BulkString("Hercules Poirot"),
+            BulkString("Pepe Carvalho"),
+        ]
+    )
