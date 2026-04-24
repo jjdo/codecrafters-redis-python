@@ -11,6 +11,10 @@ from app.resp import (
 import pytest
 
 
+def redis_cmd(cmd: str, *args: str) -> Array:
+    return Array((cmd, *(map(BulkString, args))))
+
+
 def test_ping():
     ping_cmd = Array([BulkString("PING")])
     assert execute(ping_cmd) == SimpleString("PONG")
@@ -87,14 +91,7 @@ def sleuths(storage):
 
 
 def test_lrange(sleuths):
-    lrange_cmd = Array(
-        [
-            BulkString("LRANGE"),
-            BulkString("sleuths"),
-            Integer(0),
-            Integer(2),
-        ]
-    )
+    lrange_cmd = redis_cmd("LRANGE", "sleuths", "0", "2")
     assert execute(lrange_cmd) == Array(
         [
             BulkString("Sherlock Holmes"),

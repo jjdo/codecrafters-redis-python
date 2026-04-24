@@ -21,6 +21,7 @@ storage = Storage()
 
 def execute(cmd: Array) -> RESPType:
     # cmd[0] is the command name
+    # cmd[1:n] are the command arguments. These are always bulk strings.
     match cmd[0].value.upper():
         case "PING":
             return ping()
@@ -57,9 +58,9 @@ def set(args: Array) -> RESPType:
         # Options
         match args[2].value:
             case "EX":
-                expiry_ms = args[3].value * 1000
+                expiry_ms = int(args[3].value) * 1000
             case "PX":
-                expiry_ms = args[3].value
+                expiry_ms = int(args[3].value)
             case _:
                 raise NotImplementedError
     else:
@@ -99,7 +100,7 @@ def lrange(args: Array) -> RESPType:
     if not (slist := storage.get(key)):
         return ArrayNull()
 
-    start, stop = args[1].value, args[2].value
+    start, stop = map(int, args[1].value, args[2].value)
     if start > stop or start > len(slist):
         return ArrayNull()
 
