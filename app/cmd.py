@@ -132,7 +132,13 @@ def llen(args: Array) -> Integer:
 
 def lpop(args: Array) -> BulkString | BulkNullString:
     key = args[0].value
+    count = int(args[1].value) if len(args) > 1 else None
+
     if not (slist := storage.get(key)):  # Does not exist or empty
         return BulkNullString()
 
-    return BulkString(slist.pop(0))
+    if count is None:
+        return BulkString(slist.pop(0))
+
+    count = min(count, len(slist))
+    return Array(list(map(BulkString, (slist.pop(0) for _ in range(0, count)))))
