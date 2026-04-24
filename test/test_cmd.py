@@ -6,13 +6,12 @@ from app.resp import (
     BulkNullString,
     SimpleString,
     Integer,
-    dump,
 )
 import pytest
 
 
-def redis_cmd(cmd: str, *args: str) -> Array:
-    return Array((cmd, *(map(BulkString, args))))
+def redis_cmd(*args: str) -> Array:
+    return Array(list((map(BulkString, args))))
 
 
 def test_ping():

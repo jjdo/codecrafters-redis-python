@@ -100,7 +100,7 @@ def lrange(args: Array) -> RESPType:
     if not (slist := storage.get(key)):
         return ArrayNull()
 
-    start, stop = map(int, args[1].value, args[2].value)
+    start, stop = map(int, (args[1].value, args[2].value))
     if start > stop or start > len(slist):
         return ArrayNull()
 
