@@ -31,8 +31,8 @@ def execute(cmd: Array) -> RESPType:
             return set(args(cmd))
         case "GET":
             return get(args(cmd))
-        case "RPUSH":
-            return rpush(args(cmd))
+        case "RPUSH" | "LPUSH" as push_cmd:
+            return apush(args(cmd), push_cmd)
         case "LRANGE":
             return lrange(args(cmd))
         case _:
@@ -77,18 +77,25 @@ def get(args: Array) -> RESPType:
         return BulkNullString()
 
 
-def rpush(args: Array) -> RESPType:
+def apush(args: Array, cmd: str) -> RESPType:
     # Expect at least one key and one value.
     if len(args) < 2:
         raise InvalidCommand("RPUSH: expected a key and at least one value")
 
-    values = map(lambda v: v.value, args[1:])
+    values = list(map(lambda v: v.value, args[1:]))
+    if cmd == "LPUSH":
+        values.reverse()
+
     if (key := args[0].value) not in storage:
-        slist = list(values)
+        slist = values
         storage.set(key, slist)
     else:
         slist = storage.get(key)
-        slist.extend(values)
+        if cmd == "LPUSH":
+            slist = values + slist
+        else:
+            slist = slist + values
+        storage.set(key, slist)
     return Integer(len(slist))
 
 

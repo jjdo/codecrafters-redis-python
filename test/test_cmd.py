@@ -142,3 +142,9 @@ def test_lrange_negative(sleuths):
             BulkString("Pepe Carvalho"),
         ]
     )
+
+
+def test_lpush(storage):
+    lpush_cmd = redis_cmd("LPUSH", "letters", "a", "b", "c")
+    assert execute(lpush_cmd) == Integer(3)
+    assert storage.get("letters") == ["c", "b", "a"]
