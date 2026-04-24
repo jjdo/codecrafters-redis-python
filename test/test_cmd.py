@@ -158,3 +158,25 @@ def test_llen(sleuths):
 def test_llen_missing():
     llen_cmd = redis_cmd("LLEN", "does_not_exist")
     assert execute(llen_cmd) == Integer(0)
+
+
+def test_lpop(sleuths):
+    lpop_cmd = redis_cmd("LPOP", "sleuths")
+    assert execute(lpop_cmd) == BulkString("Sherlock Holmes")
+    assert len(sleuths.get("sleuths")) == 2
+
+    lpop_cmd = redis_cmd("LPOP", "sleuths")
+    assert execute(lpop_cmd) == BulkString("Hercules Poirot")
+    assert len(sleuths.get("sleuths")) == 1
+
+    lpop_cmd = redis_cmd("LPOP", "sleuths")
+    assert execute(lpop_cmd) == BulkString("Pepe Carvalho")
+    assert len(sleuths.get("sleuths")) == 0
+
+    lpop_cmd = redis_cmd("LPOP", "sleuths")
+    assert execute(lpop_cmd) == BulkNullString()
+
+
+def test_lpop_missing():
+    lpop_cmd = redis_cmd("LPOP", "does_not_exist")
+    assert execute(lpop_cmd) == BulkNullString()

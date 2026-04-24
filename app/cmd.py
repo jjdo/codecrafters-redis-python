@@ -37,6 +37,8 @@ def execute(cmd: Array) -> RESPType:
             return lrange(args(cmd))
         case "LLEN":
             return llen(args(cmd))
+        case "LPOP":
+            return lpop(args(cmd))
         case _:
             raise NotImplementedError
 
@@ -126,3 +128,11 @@ def llen(args: Array) -> Integer:
         return Integer(0)
 
     return Integer(len(slist))
+
+
+def lpop(args: Array) -> BulkString | BulkNullString:
+    key = args[0].value
+    if not (slist := storage.get(key)):  # Does not exist or empty
+        return BulkNullString()
+
+    return BulkString(slist.pop(0))
