@@ -1,13 +1,6 @@
-from app.cmd import execute, Stored, InvalidCommand, time_ms
+from app.cmd import execute, InvalidCommand
 from app.resp import Array, BulkString, dump
 import pytest
-
-
-@pytest.fixture
-def storage(monkeypatch):
-    storage = {}
-    monkeypatch.setattr("app.cmd.storage", storage)
-    yield storage
 
 
 def test_ping():
@@ -28,7 +21,7 @@ def test_set_get(storage):
     )
     reply = execute(set_cmd)
     assert dump(reply) == b"+OK\r\n"
-    assert storage["name"].value == "Hercules Poirot"
+    assert storage.get("name") == "Hercules Poirot"
 
     get_cmd = Array([BulkString("GET"), BulkString("name")])
     reply = execute(get_cmd)
@@ -39,12 +32,6 @@ def test_get_missing(storage):
     get_cmd = Array([BulkString("GET"), BulkString("name")])
     reply = execute(get_cmd)
     assert dump(reply) == b"$-1\r\n"
-
-
-def test_stored():
-    assert Stored("a").expired(time_ms()) is False
-    assert Stored("a", expiry_ms=100).expired(time_ms() + 50) is False
-    assert Stored("a", expiry_ms=100).expired(time_ms() + 100) is True
 
 
 def test_rpush(storage):
@@ -58,7 +45,7 @@ def test_rpush(storage):
     )
     reply = execute(rpush_cmd)
     assert dump(reply) == b":2\r\n"
-    assert storage["sleuths"].value == ["Sherlock Holmes", "Hercules Poirot"]
+    assert storage.get("sleuths") == ["Sherlock Holmes", "Hercules Poirot"]
 
     # Append more
     rpush_cmd = Array(

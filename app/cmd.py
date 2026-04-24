@@ -1,7 +1,5 @@
 """REDIS commands"""
 
-from typing import Any
-from time import time_ns
 from app.resp import (
     RESPType,
     Array,
@@ -10,32 +8,14 @@ from app.resp import (
     BulkNullString,
     Integer,
 )
+from app.storage import Storage
 
 
 class InvalidCommand(Exception):
     pass
 
 
-class Stored:
-    def __init__(self, value: Any, expiry_ms: int = 0):
-        self.value = value
-        self.expiry(expiry_ms)
-
-    def expiry(self, millisecs: int):
-        self.expiry_ = 0 if not millisecs else (time_ms() + millisecs)
-
-    def expired(self, now: int = 0) -> bool:
-        if not self.expiry_:
-            return False
-        now = now or time_ms()
-        return (now - self.expiry_) >= 0
-
-
-def time_ms() -> int:
-    return time_ns() // 1000_000
-
-
-storage: dict[str, Stored] = {}
+storage = Storage()
 
 
 def execute(cmd: Array) -> RESPType:
@@ -52,19 +32,19 @@ def execute(cmd: Array) -> RESPType:
                 # Options
                 match cmd[3].value:
                     case "EX":
-                        expiry = int(cmd[4].value) * 1000
+                        expiry_ms = int(cmd[4].value) * 1000
                     case "PX":
-                        expiry = int(cmd[4].value)
+                        expiry_ms = int(cmd[4].value)
                     case _:
                         raise NotImplementedError
-                storage[key] = Stored(value, expiry)
             else:
-                storage[key] = Stored(value)
+                expiry_ms = 0
+            storage.set(key, value, expiry_ms)
             return SimpleString("OK")
         case "GET":
             key = cmd[1].value
-            if (stored := storage.get(key)) and not stored.expired():
-                return BulkString(stored.value)
+            if value := storage.get(key):
+                return BulkString(value)
             else:
                 return BulkNullString()
         case "RPUSH":
@@ -72,10 +52,12 @@ def execute(cmd: Array) -> RESPType:
             if len(cmd) > 2:
                 values = map(lambda v: v.value, cmd[2:])
                 if (key := cmd[1].value) not in storage:
-                    storage[key] = Stored(list(values))
+                    slist = list(values)
+                    storage.set(key, slist)
                 else:
-                    storage[key].value.extend(values)
-                return Integer(len(storage[key].value))
+                    slist = storage.get(key)
+                    slist.extend(values)
+                return Integer(len(slist))
             raise InvalidCommand("RPUSH: expected a key and at least one value")
         case _:
             raise NotImplementedError
