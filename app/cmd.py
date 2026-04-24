@@ -35,6 +35,8 @@ def execute(cmd: Array) -> RESPType:
             return apush(args(cmd), push_cmd)
         case "LRANGE":
             return lrange(args(cmd))
+        case "LLEN":
+            return llen(args(cmd))
         case _:
             raise NotImplementedError
 
@@ -43,15 +45,15 @@ def args(cmd: Array) -> Array:
     return cmd[1:]
 
 
-def ping() -> RESPType:
+def ping() -> SimpleString:
     return SimpleString("PONG")
 
 
-def echo(args: Array) -> RESPType:
+def echo(args: Array) -> BulkString:
     return BulkString(args[0].value)
 
 
-def set(args: Array) -> RESPType:
+def set(args: Array) -> SimpleString:
     key = args[0].value
     value = args[1].value
     if len(args) > 2:
@@ -69,7 +71,7 @@ def set(args: Array) -> RESPType:
     return SimpleString("OK")
 
 
-def get(args: Array) -> RESPType:
+def get(args: Array) -> BulkString | BulkNullString:
     key = args[0].value
     if value := storage.get(key):
         return BulkString(value)
@@ -77,7 +79,7 @@ def get(args: Array) -> RESPType:
         return BulkNullString()
 
 
-def apush(args: Array, cmd: str) -> RESPType:
+def apush(args: Array, cmd: str) -> Integer:
     # Expect at least one key and one value.
     if len(args) < 2:
         raise InvalidCommand("RPUSH: expected a key and at least one value")
@@ -86,11 +88,11 @@ def apush(args: Array, cmd: str) -> RESPType:
     if cmd == "LPUSH":
         values.reverse()
 
-    if (key := args[0].value) not in storage:
+    key = args[0].value
+    if (slist := storage.get(key)) is None:  # Does not exist
         slist = values
         storage.set(key, slist)
     else:
-        slist = storage.get(key)
         if cmd == "LPUSH":
             slist = values + slist
         else:
@@ -99,12 +101,12 @@ def apush(args: Array, cmd: str) -> RESPType:
     return Integer(len(slist))
 
 
-def lrange(args: Array) -> RESPType:
+def lrange(args: Array) -> Array:
     if len(args) < 3:
         raise InvalidCommand("LRANGE: expected key and two indexes")
 
     key = args[0].value
-    if not (slist := storage.get(key)):
+    if not (slist := storage.get(key)):  # Does not exist or empty
         return Array([])
 
     start, stop = map(int, (args[1].value, args[2].value))
@@ -116,3 +118,11 @@ def lrange(args: Array) -> RESPType:
         return Array([])
 
     return Array(list(map(BulkString, slist[start : (stop + 1)])))
+
+
+def llen(args: Array) -> Integer:
+    key = args[0].value
+    if not (slist := storage.get(key)):  # Does not exist or empty
+        return Integer(0)
+
+    return Integer(len(slist))

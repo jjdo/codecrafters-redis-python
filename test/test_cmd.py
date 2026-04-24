@@ -148,3 +148,13 @@ def test_lpush(storage):
     lpush_cmd = redis_cmd("LPUSH", "letters", "a", "b", "c")
     assert execute(lpush_cmd) == Integer(3)
     assert storage.get("letters") == ["c", "b", "a"]
+
+
+def test_llen(sleuths):
+    llen_cmd = redis_cmd("LLEN", "sleuths")
+    assert execute(llen_cmd) == Integer(3)
+
+
+def test_llen_missing():
+    llen_cmd = redis_cmd("LLEN", "does_not_exist")
+    assert execute(llen_cmd) == Integer(0)
