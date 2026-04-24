@@ -15,50 +15,44 @@ def redis_cmd(*args: str) -> Array:
 
 
 def test_ping():
-    ping_cmd = Array([BulkString("PING")])
+    ping_cmd = redis_cmd("PING")
     assert execute(ping_cmd) == SimpleString("PONG")
 
 
 def test_echo():
-    echo_cmd = Array([BulkString("ECHO"), BulkString("Hello!")])
+    echo_cmd = redis_cmd("ECHO", "Hello!")
     assert execute(echo_cmd) == BulkString("Hello!")
 
 
 def test_set_get(storage):
-    set_cmd = Array(
-        [BulkString("SET"), BulkString("name"), BulkString("Hercules Poirot")]
-    )
+    set_cmd = redis_cmd("SET", "name", "Hercules Poirot")
     assert execute(set_cmd) == SimpleString("OK")
     assert storage.get("name") == "Hercules Poirot"
 
-    get_cmd = Array([BulkString("GET"), BulkString("name")])
+    get_cmd = redis_cmd("GET", "name")
     assert execute(get_cmd) == BulkString("Hercules Poirot")
 
 
 def test_get_missing(storage):
-    get_cmd = Array([BulkString("GET"), BulkString("name")])
+    get_cmd = redis_cmd("GET", "name")
     assert execute(get_cmd) == BulkNullString()
 
 
 def test_rpush(storage):
-    rpush_cmd = Array(
-        [
-            BulkString("RPUSH"),
-            BulkString("sleuths"),
-            BulkString("Sherlock Holmes"),
-            BulkString("Hercules Poirot"),
-        ]
+    rpush_cmd = redis_cmd(
+        "RPUSH",
+        "sleuths",
+        "Sherlock Holmes",
+        "Hercules Poirot",
     )
     assert execute(rpush_cmd) == Integer(2)
     assert storage.get("sleuths") == ["Sherlock Holmes", "Hercules Poirot"]
 
     # Append more
-    rpush_cmd = Array(
-        [
-            BulkString("RPUSH"),
-            BulkString("sleuths"),
-            BulkString("Pepe Carvalho"),
-        ]
+    rpush_cmd = redis_cmd(
+        "RPUSH",
+        "sleuths",
+        "Pepe Carvalho",
     )
     assert execute(rpush_cmd) == Integer(3)
     assert storage["sleuths"].value == [
@@ -70,20 +64,18 @@ def test_rpush(storage):
 
 def test_rpush_invalid(storage):
     with pytest.raises(InvalidCommand):
-        execute(Array([BulkString("RPUSH"), BulkString("name")]))
+        execute(redis_cmd("RPUSH", "name"))
 
 
 @pytest.fixture
 def sleuths(storage):
     assert execute(
-        Array(
-            [
-                BulkString("RPUSH"),
-                BulkString("sleuths"),
-                BulkString("Sherlock Holmes"),
-                BulkString("Hercules Poirot"),
-                BulkString("Pepe Carvalho"),
-            ]
+        redis_cmd(
+            "RPUSH",
+            "sleuths",
+            "Sherlock Holmes",
+            "Hercules Poirot",
+            "Pepe Carvalho",
         )
     ) == Integer(3)
     yield storage
@@ -99,14 +91,7 @@ def test_lrange(sleuths):
         ]
     )
 
-    lrange_cmd = Array(
-        [
-            BulkString("LRANGE"),
-            BulkString("sleuths"),
-            Integer(0),
-            Integer(1),
-        ]
-    )
+    lrange_cmd = redis_cmd("LRANGE", "sleuths", "0", "1")
     assert execute(lrange_cmd) == Array(
         [
             BulkString("Sherlock Holmes"),
@@ -116,50 +101,22 @@ def test_lrange(sleuths):
 
 
 def test_lrange_missing(storage):
-    lrange_cmd = Array(
-        [
-            BulkString("LRANGE"),
-            BulkString("sleuths"),
-            Integer(0),
-            Integer(2),
-        ]
-    )
-    assert execute(lrange_cmd) == ArrayNull()
+    lrange_cmd = redis_cmd("LRANGE", "sleuths", "0", "2")
+    assert execute(lrange_cmd) == Array([])
 
 
 def test_lrange_start_index_ge_length(sleuths):
-    lrange_cmd = Array(
-        [
-            BulkString("LRANGE"),
-            BulkString("sleuths"),
-            Integer(100),
-            Integer(102),
-        ]
-    )
-    assert execute(lrange_cmd) == ArrayNull()
+    lrange_cmd = redis_cmd("LRANGE", "sleuths", "100", "102")
+    assert execute(lrange_cmd) == Array([])
 
 
 def test_lrange_start_index_ge_end_index(sleuths):
-    lrange_cmd = Array(
-        [
-            BulkString("LRANGE"),
-            BulkString("sleuths"),
-            Integer(2),
-            Integer(0),
-        ]
-    )
-    assert execute(lrange_cmd) == ArrayNull()
+    lrange_cmd = redis_cmd("LRANGE", "sleuths", "2", "0")
+    assert execute(lrange_cmd) == Array([])
 
 
 def test_lrange_end_index_ge_length(sleuths):
-    lrange_cmd = Array(
-        [
-            BulkString("LRANGE"),
-            BulkString("sleuths"),
-            Integer(0),
-            Integer(100),
-        ]
-    )
+    lrange_cmd = redis_cmd("LRANGE", "sleuths", "0", "100")
     assert execute(lrange_cmd) == Array(
         [
             BulkString("Sherlock Holmes"),
