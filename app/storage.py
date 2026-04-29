@@ -1,3 +1,6 @@
+"""In-memory storage"""
+
+from enum import IntEnum, auto
 from queue import Queue
 from threading import Event
 from typing import Any, Iterable
@@ -36,7 +39,7 @@ def time_ms() -> int:
 class Storage(dict[str, Stored]):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.waiters = {}
+        self.observers = Observers()
 
     def set(self, key: str, value: Any, expiry_ms: int = 0):
         """Inserts/updates a value."""
@@ -67,42 +70,56 @@ class Storage(dict[str, Stored]):
         except KeyError:
             return None
 
-    def add_waiter(self, keys: Iterable[str], waiter: "Waiter"):
-        for key in keys:
-            if key in self.waiters:
-                self.waiters[key].append(waiter)
-            else:
-                self.waiters[key] = [waiter]
 
-    def notify_waiter(self, key: str):
-        if waiters := self.waiters.get(key):
-            # Get first waiter on the key
-            waiter = waiters[0]
-            # Remove all the keys with the waiter.
-            for k, _ in filter(lambda w: w == waiter, self.items()):
-                del self.waiters[k]
-            # Notify it.
-            waiter.notify_push(key)
+class Op(IntEnum):
+    PUSH = auto()
 
 
-class Waiter(Event):
+type ObserverKey = tuple[Op, str]
+
+
+class Observer(Event):
+    pass
+
+
+class Observers(dict):
+    def add(self, op: Op, keys: Iterable[str]) -> Observer:
+        """Registers an observer on the given Op and keys."""
+        match op:
+            case Op.PUSH:
+                observer = OnPush(len(keys))
+                for key in keys:
+                    self.setdefault((Op.PUSH, key), []).append(observer)
+                return observer
+            case other:
+                raise ValueError(f"Invalid Op {other}")
+
+    def notify(self, op: Op, key: str):
+        """Notify the first observer on the given pair (Op, key)."""
+        if observers := self.pop((op, key), None):
+            # Get first observer on the key
+            observer = observers[0]
+            observer.notify(key)
+
+
+class OnPush(Observer):
     __slots__ = ("q_",)
 
     def __init__(self, num_keys: int):
         super().__init__()
         self.q_ = Queue(num_keys)
 
-    def wait_push(self, timeout) -> str | None:
+    def wait(self, timeout: int) -> str | None:
         """Waits until a value is pushed in any of the keys.
 
         Returns the first key where a value was pushed."""
-        match self.wait(timeout):
+        match super().wait(timeout):
             case True:
                 return self.q_.get_nowait()
             case False:
                 return None
 
-    def notify_push(self, key: str):
+    def notify(self, key: str):
         """Notifies that a value has been pushed in key."""
         self.q_.put_nowait(key)
-        self.set()
+        super().set()

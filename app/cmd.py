@@ -9,7 +9,7 @@ from app.resp import (
     BulkNullString,
     Integer,
 )
-from app.storage import Storage, Waiter
+from app.storage import Storage, Op
 
 
 class InvalidCommand(Exception):
@@ -103,8 +103,8 @@ def apush(args: Array, cmd: str) -> Integer:
             slist = slist + values
         storage.set(key, slist)
 
-    if key in storage.waiters:
-        storage.notify_waiter(key)
+    # Notify any PUSH observers on this key.
+    storage.observers.notify(Op.PUSH, key)
 
     return Integer(len(slist))
 
@@ -161,19 +161,14 @@ def blpop(args: Array) -> Array | ArrayNull:
     keys = [arg.value for arg in args[0:-1]]
     timeout = float(args[-1].value) or None  # 0.0 is None (wait forever)
 
-    print("BLPOP keys", keys, "timeout", timeout)
     # Check if any of the lists is non empty and return the first element.
     for key in keys:
         if slist := storage.get(key):
             return Array([BulkString(key), BulkString(slist.pop(0))])
 
     # No element can be popped. Enter blocking mode.
-    waiter = Waiter(len(keys))
-    storage.add_waiter(keys, waiter)
-    key = waiter.wait_push(timeout)
-    print("BLPOP : Someone pushed ->", key)
-    if key and (slist := storage.get(key)):
+    on_push = storage.observers.add(Op.PUSH, keys)
+    if (key := on_push.wait(timeout)) and (slist := storage.get(key)):
         return Array([BulkString(key), BulkString(slist.pop(0))])
-    else:
-        print("slist is", slist)
-        return ArrayNull()
+
+    return ArrayNull()

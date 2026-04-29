@@ -3,7 +3,6 @@ import time
 from app.cmd import execute, InvalidCommand
 from app.resp import (
     Array,
-    ArrayNull,
     BulkString,
     BulkNullString,
     SimpleString,
