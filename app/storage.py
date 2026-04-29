@@ -36,7 +36,7 @@ def time_ms() -> int:
 class Storage(dict[str, Stored]):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self["__waiters__"] = {}
+        self.waiters = {}
 
     def set(self, key: str, value: Any, expiry_ms: int = 0):
         """Inserts/updates a value."""
@@ -66,10 +66,6 @@ class Storage(dict[str, Stored]):
             return (stored, expired)
         except KeyError:
             return None
-
-    @property
-    def waiters(self) -> dict[str, "Waiter"]:
-        return self["__waiters__"]
 
     def add_waiter(self, keys: Iterable[str], waiter: "Waiter"):
         for key in keys:

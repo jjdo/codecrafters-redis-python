@@ -1,4 +1,3 @@
-from functools import partial
 from threading import Thread
 import time
 from app.cmd import execute, InvalidCommand
