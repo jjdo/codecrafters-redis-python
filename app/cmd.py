@@ -41,6 +41,8 @@ def execute(cmd: Array) -> RESPType:
             return lpop(args(cmd))
         case "BLPOP":
             return blpop(args(cmd))
+        case "TYPE":
+            return type_(args(cmd))
         case _:
             raise NotImplementedError
 
@@ -172,3 +174,15 @@ def blpop(args: Array) -> Array | ArrayNull:
         return Array([BulkString(key), BulkString(slist.pop(0))])
 
     return ArrayNull()
+
+
+def type_(args: Array) -> SimpleString:
+    if not args:
+        raise InvalidCommand("TYPE: expected key")
+
+    key = args[0].value
+    if value := storage.get(key):
+        if isinstance(value, str):
+            return SimpleString("string")
+
+    return SimpleString("none")

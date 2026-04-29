@@ -257,3 +257,15 @@ def test_blpop_multiple(storage):
         ]
     )
     assert blpop2_ret is None
+
+
+def test_type(storage):
+    storage.set("a_string", "a_string")
+
+    type_cmd = redis_cmd("TYPE", "a_string")
+    assert execute(type_cmd) == SimpleString("string")
+
+
+def test_type_misisng(storage):
+    type_cmd = redis_cmd("TYPE", "does_not_exist")
+    assert execute(type_cmd) == SimpleString("none")
