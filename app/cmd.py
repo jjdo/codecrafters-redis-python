@@ -9,7 +9,7 @@ from app.resp import (
     BulkNullString,
     Integer,
 )
-from app.storage import Storage
+from app.storage import Storage, Waiter
 
 
 class InvalidCommand(Exception):
@@ -39,6 +39,8 @@ def execute(cmd: Array) -> RESPType:
             return llen(args(cmd))
         case "LPOP":
             return lpop(args(cmd))
+        case "BLPOP":
+            return blpop(args(cmd))
         case _:
             raise NotImplementedError
 
@@ -100,6 +102,10 @@ def apush(args: Array, cmd: str) -> Integer:
         else:
             slist = slist + values
         storage.set(key, slist)
+
+    if key in storage.waiters:
+        storage.notify_waiter(key)
+
     return Integer(len(slist))
 
 
@@ -123,6 +129,8 @@ def lrange(args: Array) -> Array:
 
 
 def llen(args: Array) -> Integer:
+    if not args:
+        raise InvalidCommand("LLEN: expected key")
     key = args[0].value
     if not (slist := storage.get(key)):  # Does not exist or empty
         return Integer(0)
@@ -131,6 +139,8 @@ def llen(args: Array) -> Integer:
 
 
 def lpop(args: Array) -> BulkString | BulkNullString:
+    if not args:
+        raise InvalidCommand("LPOP: expected key")
     key = args[0].value
     count = int(args[1].value) if len(args) > 1 else None
 
@@ -142,3 +152,28 @@ def lpop(args: Array) -> BulkString | BulkNullString:
 
     count = min(count, len(slist))
     return Array(list(map(BulkString, (slist.pop(0) for _ in range(0, count)))))
+
+
+def blpop(args: Array) -> Array | ArrayNull:
+    # There may be len(args) -1 keys. The last arg is always the timeout.
+    if len(args) < 2:
+        raise InvalidCommand("BLPOP: expected at least one key and a timeout")
+    keys = [arg.value for arg in args[0:-1]]
+    timeout = float(args[-1].value) or None  # 0.0 is None (wait forever)
+
+    print("BLPOP keys", keys, "timeout", timeout)
+    # Check if any of the lists is non empty and return the first element.
+    for key in keys:
+        if slist := storage.get(key):
+            return Array([BulkString(key), BulkString(slist.pop(0))])
+
+    # No element can be popped. Enter blocking mode.
+    waiter = Waiter(len(keys))
+    storage.add_waiter(keys, waiter)
+    key = waiter.wait_push(timeout)
+    print("BLPOP : Someone pushed ->", key)
+    if key and (slist := storage.get(key)):
+        return Array([BulkString(key), BulkString(slist.pop(0))])
+    else:
+        print("slist is", slist)
+        return ArrayNull()

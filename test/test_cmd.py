@@ -1,3 +1,6 @@
+from functools import partial
+from threading import Thread
+import time
 from app.cmd import execute, InvalidCommand
 from app.resp import (
     Array,
@@ -203,3 +206,56 @@ def test_lpop_all(sleuths):
         ]
     )
     assert len(sleuths.get("sleuths")) == 0
+
+
+def test_blpop(storage):
+    def send_rpush():
+        time.sleep(1)
+        execute(redis_cmd("RPUSH", "sleuths", "Sherlock Holmes"))
+
+    rpush = Thread(name="RPUSH", target=send_rpush)
+    rpush.start()
+
+    blpop_cmd = redis_cmd("BLPOP", "sleuths", "0")
+    assert execute(blpop_cmd) == Array(
+        [
+            BulkString("sleuths"),
+            BulkString("Sherlock Holmes"),
+        ]
+    )
+
+
+def test_blpop_multiple(storage):
+    blpop1_ret = None
+    blpop2_ret = None
+
+    def blpop_1():
+        nonlocal blpop1_ret
+        blpop1_ret = execute(redis_cmd("BLPOP", "sleuths", "0"))
+
+    def blpop_2():
+        nonlocal blpop2_ret
+        blpop2_ret = execute(redis_cmd("BLPOP", "sleuths", "0"))
+
+    blpop_1 = Thread(name="BLPOP_1", target=blpop_1, daemon=True)
+    blpop_1.start()
+    blpop_2 = Thread(name="BLPOP_2", target=blpop_2, daemon=True)
+    blpop_2.start()
+
+    def send_rpush():
+        time.sleep(1)
+        execute(redis_cmd("RPUSH", "sleuths", "Sherlock Holmes"))
+
+    rpush = Thread(name="RPUSH", target=send_rpush)
+    rpush.start()
+
+    blpop_1.join(timeout=2)
+    blpop_2.join(timeout=2)
+
+    assert blpop1_ret == Array(
+        [
+            BulkString("sleuths"),
+            BulkString("Sherlock Holmes"),
+        ]
+    )
+    assert blpop2_ret is None
